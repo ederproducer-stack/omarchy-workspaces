@@ -48,22 +48,27 @@
 -- o.window("(Alacritty|kitty|foot)", { scroll_touchpad = 1.5 })
 -- o.window("com.mitchellh.ghostty", { scroll_touchpad = 0.2 })
 
+-- >>> omarchy-workspaces:gestures >>>
 -- Enable touchpad gestures for changing workspaces.
 -- See https://wiki.hypr.land/Configuring/Advanced-and-Cool/Gestures/
 --
--- GNOME-style live workspace swipe with three fingers. With
--- workspace_swipe_invert = true, swiping LEFT goes to the next workspace
--- and swiping RIGHT goes back one. create_new = true lets a swipe past the
--- last workspace create a new one when all five are in use.
+-- Tuned for short, decisive touchpad swipes: a small drag commits instead of
+-- snapping back, and the swipe stops cleanly at the first/last workspace.
 hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
 
 hl.config({
   gestures = {
     workspace_swipe_invert = true,
-    workspace_swipe_create_new = true,
-    workspace_swipe_forever = true,
+    workspace_swipe_create_new = false,
+    workspace_swipe_forever = false,
+    workspace_swipe_distance = 180,
+    workspace_swipe_cancel_ratio = 0.25,
+    workspace_swipe_min_speed_to_force = 8,
+    workspace_swipe_direction_lock = true,
+    workspace_swipe_direction_lock_threshold = 14,
   },
 })
+-- <<< omarchy-workspaces:gestures <<<
 
 -- Enable touchpad gestures for moving focus (helpful on scrolling layout).
 -- hl.gesture({ fingers = 3, direction = "left", action = function() hl.dispatch(hl.dsp.focus({ direction = "l" })) end })

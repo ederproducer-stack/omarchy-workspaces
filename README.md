@@ -4,7 +4,7 @@ Utilitários para o Hyprland/Omarchy que deixam o uso das áreas de trabalho mai
 
 1. **Compaction** — se uma área ficar vazia no meio, as janelas da área ocupada mais próxima acima são movidas para preenchê-la (incluindo áreas acima da 5ª, como a 6ª, 7ª...).
 2. **Saída ao fechar** — quando você **fecha a última janela da área em que está**, a visão pula automaticamente para a área ocupada mais à esquerda (ou a primeira ocupada acima, se não houver nenhuma à esquerda). Só dispara no evento `closewindow`: mudar para uma área vazia **não** faz a visão sair dela, então você pode abrir algo ali normalmente.
-3. **Swipe de 3 dedos** — gesto horizontal do touchpad para trocar de área, com criação de novas áreas ao passar da última.
+3. **Swipe de 3 dedos** — gesto horizontal do touchpad para trocar de área, com limiares afinados para responder a gestos curtos e sem criar áreas novas automaticamente.
 
 ## Arquivos
 
@@ -24,7 +24,7 @@ cd omarchy-workspaces
 ./install.sh
 ```
 
-O `install.sh` copia o daemon, garante a linha de autostart e aplica as opções de gesto. Depois recarregue o Hyprland:
+O `install.sh` copia o daemon, garante a linha de autostart e instala o bloco de gestos afinado. Ele é idempotente: troca apenas o trecho entre os marcadores `omarchy-workspaces:gestures` (ou a seção antiga de gestos), preservando as outras opções do `input.lua`. Depois recarregue o Hyprland:
 
 ```bash
 hyprctl reload
@@ -38,9 +38,14 @@ Para inspecionar:
 
 ```bash
 hyprctl workspaces -j | jq -r '.[] | [.id, (.windows|tostring)] | @tsv'
+hyprctl getoption gestures:workspace_swipe_distance
+hyprctl getoption gestures:workspace_swipe_cancel_ratio
+hyprctl getoption gestures:workspace_swipe_min_speed_to_force
 hyprctl getoption gestures:workspace_swipe_create_new
 hyprctl getoption gestures:workspace_swipe_forever
 ```
+
+Os valores afinados são `distance=180`, `cancel_ratio=0.25` (~45 px para confirmar), `min_speed_to_force=8`, `create_new=false` e `forever=false`. Se o gesto ficar sensível demais, suba o `cancel_ratio` para `0.35`.
 
 ## Widget de barra (opcional)
 
