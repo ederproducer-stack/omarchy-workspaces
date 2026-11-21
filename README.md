@@ -3,7 +3,7 @@
 Utilitários para o Hyprland/Omarchy que deixam o uso das áreas de trabalho mais parecido com o GNOME:
 
 1. **Compaction** — se uma área ficar vazia no meio, as janelas da área ocupada mais próxima acima são movidas para preenchê-la (incluindo áreas acima da 5ª, como a 6ª, 7ª...).
-2. **Saída ao fechar (com slide para a direita)** — quando você **fecha a última janela da área em que está**, a visão pula automaticamente para a área ocupada mais à esquerda (ou a primeira ocupada acima, se não houver nenhuma à esquerda). O pulo é animado como `slide right` e, 2 segundos depois, a animação original de workspaces é restaurada. Só dispara no evento `closewindow`: mudar para uma área vazia **não** faz a visão sair dela, então você pode abrir algo ali normalmente.
+2. **Saída ao fechar (com slide para a direita)** — quando você **fecha a última janela da área em que está**, a visão pula automaticamente para a área ocupada mais à esquerda (ou a primeira ocupada acima, se não houver nenhuma à esquerda). O pulo é animado como `slide left` e, 2 segundos depois, a animação original de workspaces é restaurada. Só dispara no evento `closewindow`: mudar para uma área vazia **não** faz a visão sair dela, então você pode abrir algo ali normalmente.
 3. **Swipe de 3 dedos** — gesto horizontal do touchpad para trocar de área, com limiares afinados para responder a gestos curtos e sem criar áreas novas automaticamente.
 
 ## Arquivos
@@ -32,7 +32,7 @@ hyprctl reload
 
 ## Como funciona
 
-O daemon ouve o socket de eventos do Hyprland (`.socket2.sock`) e reage a `closewindow` para a saída da área vazia. Logo antes de focar a área de destino ele aplica `hl.animation({leaf="workspaces", style="slide right", ...})` e, após 2 s, devolve a animação que estava configurada (o Omarchy desliga a animação de workspaces por padrão — ela fica ligada só durante o pulo). Em paralelo, a cada 2 segundos ele procura buracos entre as áreas e move janelas das áreas superiores para preenchê-los — isso é o que faz a "mais próxima ocupar o lugar da vazia". Se a área doadora for a que você está vendo, a visão acompanha a janela.
+O daemon ouve o socket de eventos do Hyprland (`.socket2.sock`) e reage a `closewindow` para a saída da área vazia. Logo antes de focar a área de destino ele aplica `hl.animation({leaf="workspaces", style="slide left", ...})` e, após 2 s, devolve a animação que estava configurada (o Omarchy desliga a animação de workspaces por padrão — ela fica ligada só durante o pulo). Em paralelo, a cada 2 segundos ele procura buracos entre as áreas e move janelas das áreas superiores para preenchê-los — isso é o que faz a "mais próxima ocupar o lugar da vazia". Se a área doadora for a que você está vendo, a visão acompanha a janela.
 
 Para inspecionar:
 

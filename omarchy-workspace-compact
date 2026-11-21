@@ -13,7 +13,7 @@ import subprocess
 import threading
 import time
 
-SLIDE_STYLE = "slide right"
+SLIDE_STYLE = "slide left"
 SLIDE_SPEED = 3.0
 SLIDE_BEZIER = "easeOutQuint"
 
