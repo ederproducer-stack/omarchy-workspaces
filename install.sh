@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Instala o daemon e as opções de gesto do omarchy-workspaces.
+# Instala o daemon, as regras de persistência e os gestos do omarchy-workspaces.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,50 +18,57 @@ else
   echo "autostart: já configurado"
 fi
 
-# Gestos: substitui o bloco gerenciado pela versão afinada deste repo.
-# Idempotente e preserva o restante do input.lua do usuário.
-INPUT="$CONFIG_DIR/hypr/input.lua"
-TEMPLATE="$SCRIPT_DIR/config/input.lua"
-touch "$INPUT"
-python3 - "$TEMPLATE" "$INPUT" <<'PY'
+# Blocos gerenciados: substitui só o trecho marcado, preservando o resto dos
+# arquivos do usuário. Também converte instalações antigas sem marcadores.
+python3 - "$SCRIPT_DIR" "$CONFIG_DIR/hypr" <<'PY'
 import pathlib
 import re
 import sys
 
-template = pathlib.Path(sys.argv[1])
-target = pathlib.Path(sys.argv[2])
-START = "-- >>> omarchy-workspaces:gestures >>>"
-END = "-- <<< omarchy-workspaces:gestures <<<"
+repo, hypr = (pathlib.Path(p) for p in sys.argv[1:3])
 
-match = re.search(
-    rf"{re.escape(START)}.*?{re.escape(END)}\n?",
-    template.read_text(),
-    re.S,
-)
-if not match:
-    sys.exit("erro: bloco de gestos ausente em config/input.lua")
-block = match.group(0)
 
-text = target.read_text()
-new, count = re.subn(
-    rf"{re.escape(START)}.*?{re.escape(END)}\n?",
-    lambda _: block,
-    text,
-    flags=re.S,
-)
-if count == 0:
-    # Instalações antigas: troca a seção de gestos sem marcadores.
-    legacy = re.compile(
-        r"-- Enable touchpad gestures for changing workspaces\..*?"
-        r"(?=-- Enable touchpad gestures for moving focus)",
+def apply(template_name, target_name, name, legacy_pattern=None):
+    template = repo / "config" / template_name
+    target = hypr / target_name
+    target.touch()
+
+    start = f"-- >>> omarchy-workspaces:{name} >>>"
+    end = f"-- <<< omarchy-workspaces:{name} <<<"
+    match = re.search(
+        rf"{re.escape(start)}.*?{re.escape(end)}\n?",
+        template.read_text(),
         re.S,
     )
-    new, count = legacy.subn(lambda _: block + "\n", text)
-if count == 0:
-    new = text.rstrip() + "\n\n" + block
+    if not match:
+        sys.exit(f"erro: bloco '{name}' ausente em {template}")
+    block = match.group(0)
 
-target.write_text(new)
+    text = target.read_text()
+    new, count = re.subn(
+        rf"{re.escape(start)}.*?{re.escape(end)}\n?",
+        lambda _: block,
+        text,
+        flags=re.S,
+    )
+    if count == 0 and legacy_pattern:
+        new, count = re.subn(legacy_pattern, lambda _: block + "\n", text, flags=re.S)
+    if count == 0:
+        new = text.rstrip() + "\n\n" + block
+
+    target.write_text(new)
+
+
+apply(
+    "input.lua", "input.lua", "gestures",
+    r"-- Enable touchpad gestures for changing workspaces\..*?"
+    r"(?=-- Enable touchpad gestures for moving focus)",
+)
+apply(
+    "workspaces-persistent.lua", "hyprland.lua", "persistent",
+    r"-- Keep workspaces 1-5 alive.*?\nend\n",
+)
 PY
-echo "gestos: bloco afinado aplicado em $INPUT"
+echo "gestos e persistência: blocos aplicados em $CONFIG_DIR/hypr"
 
 echo "Pronto. Rode: hyprctl reload"

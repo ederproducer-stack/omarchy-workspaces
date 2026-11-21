@@ -12,8 +12,8 @@ Utilitários para o Hyprland/Omarchy que deixam o uso das áreas de trabalho mai
 | --- | --- |
 | `omarchy-workspace-compact` | `~/.local/bin/omarchy-workspace-compact` (daemon) |
 | `config/autostart.lua` | linha extra em `~/.config/hypr/autostart.lua` |
-| `config/input.lua` | seção `gestures` em `~/.config/hypr/input.lua` |
-| `config/workspaces-persistent.lua` | referência das regras de persistência |
+| `config/input.lua` | bloco de `gestures` em `~/.config/hypr/input.lua` |
+| `config/workspaces-persistent.lua` | regras de persistência 1-5 em `~/.config/hypr/hyprland.lua` |
 | `plugin/Workspaces.qml` | widget opcional `~/.config/omarchy/plugins/<user>.workspaces/Workspaces.qml` (numeração compacta na barra) |
 
 ## Instalação
@@ -24,7 +24,7 @@ cd omarchy-workspaces
 ./install.sh
 ```
 
-O `install.sh` copia o daemon, garante a linha de autostart e instala o bloco de gestos afinado. Ele é idempotente: troca apenas o trecho entre os marcadores `omarchy-workspaces:gestures` (ou a seção antiga de gestos), preservando as outras opções do `input.lua`. Depois recarregue o Hyprland:
+Numa máquina limpa, `git clone` + `./install.sh` é suficiente: o script copia o daemon, garante o autostart, instala o bloco de gestos afinado e adiciona as regras que mantêm as áreas 1-5 persistentes (necessárias para o swipe ter para onde ir — o Omarchy não as cria por padrão). Ele é idempotente: troca apenas os trechos entre os marcadores `omarchy-workspaces:gestures` e `omarchy-workspaces:persistent` (ou as seções antigas), preservando o restante de `input.lua` e `hyprland.lua`. Depois recarregue o Hyprland:
 
 ```bash
 hyprctl reload
