@@ -13,6 +13,10 @@ import subprocess
 import threading
 import time
 
+SLIDE_STYLE = "slide right"
+SLIDE_SPEED = 3.0
+SLIDE_BEZIER = "easeOutQuint"
+
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
 SIGNATURE = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
 EVENT_SOCKET = os.path.join(RUNTIME, "hypr", SIGNATURE, ".socket2.sock")
@@ -33,13 +37,52 @@ def active_id():
     return info.get("id", -1) if info else -1
 
 
-def focus_workspace(target):
-    expression = 'hl.dispatch(hl.dsp.focus({workspace="%s"}))' % target
+def hypr_eval(expression):
     try:
         subprocess.run(["hyprctl", "eval", expression],
                        capture_output=True, timeout=5)
     except Exception:
         pass
+
+
+def focus_workspace(target):
+    hypr_eval('hl.dispatch(hl.dsp.focus({workspace="%s"}))' % target)
+
+
+def current_workspace_animations():
+    """Snapshot workspace animation leaves so we can restore them afterwards."""
+    data = hypr_json("animations")
+    if not data:
+        return []
+    entries = data[0] if isinstance(data, list) and data and isinstance(data[0], list) else data
+    wanted = ("workspaces", "workspacesIn", "workspacesOut")
+    return [a for a in entries if a.get("name") in wanted]
+
+
+def set_workspace_animation(slide, snapshot=None):
+    """Set (or restore) the workspace switch animation.
+
+    When `slide` is True the switch slides to the right; otherwise the saved
+    animation values are reapplied.
+    """
+    if slide:
+        for leaf in ("workspaces", "workspacesIn"):
+            hypr_eval(
+                'hl.animation({leaf="%s", enabled=true, speed=%s, '
+                'bezier="%s", style="%s"})'
+                % (leaf, SLIDE_SPEED, SLIDE_BEZIER, SLIDE_STYLE)
+            )
+        return
+    for anim in snapshot or []:
+        leaf = anim.get("name", "")
+        style = anim.get("style") or ""
+        bezier = anim.get("bezier") or "default"
+        enabled = "true" if anim.get("enabled") else "false"
+        hypr_eval(
+            'hl.animation({leaf="%s", enabled=%s, speed=%s, '
+            'bezier="%s", style="%s"})'
+            % (leaf, enabled, anim.get("speed", 1), bezier, style)
+        )
 
 
 def move_window(address, target, follow=False):
@@ -67,20 +110,30 @@ def workspace_map():
     return ids, by_ws
 
 
-def maybe_leave_emptied_workspace():
+def maybe_leave_emptied_workspace(snapshot):
     """Called only after a window was closed."""
     time.sleep(0.4)  # let Hyprland settle after closewindow
     ids, by_ws = workspace_map()
     active = active_id()
     if active <= 0 or by_ws.get(active):
         return
+    target = None
     lower = [i for i in ids if i < active and by_ws.get(i)]
     if lower:
-        focus_workspace(max(lower))
+        target = max(lower)
+    else:
+        higher = [i for i in ids if i > active and by_ws.get(i)]
+        if higher:
+            target = min(higher)
+    if target is None:
         return
-    higher = [i for i in ids if i > active and by_ws.get(i)]
-    if higher:
-        focus_workspace(min(higher))
+
+    # The jump is animated as a slide to the right, then the original
+    # workspace animation is restored so normal switches keep their feel.
+    set_workspace_animation(True)
+    focus_workspace(target)
+    threading.Timer(2.0, set_workspace_animation,
+                    args=(False, snapshot)).start()
 
 
 def compact_once():
@@ -127,17 +180,18 @@ def listen_events():
             time.sleep(2)
 
 
-def watch_close():
+def watch_close(snapshot):
     while True:
         close_event.wait()
         close_event.clear()
         time.sleep(0.3)  # coalesce bursts of close events
-        maybe_leave_emptied_workspace()
+        maybe_leave_emptied_workspace(snapshot)
 
 
 def main():
+    snapshot = current_workspace_animations()
     threading.Thread(target=listen_events, daemon=True).start()
-    threading.Thread(target=watch_close, daemon=True).start()
+    threading.Thread(target=watch_close, args=(snapshot,), daemon=True).start()
     while True:
         compact_once()
         time.sleep(2)
