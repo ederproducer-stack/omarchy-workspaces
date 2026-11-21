@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Two independent workspace helpers:
+
+1. Compact: move windows of the nearest occupied workspace above a gap into it.
+2. On a *closewindow* event only: if the workspace being viewed just became
+   empty, focus the nearest occupied one to the left (or above).
+   Merely switching to an empty workspace must NOT jump away.
+"""
+import json
+import os
+import socket
+import subprocess
+import threading
+import time
+
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
+SIGNATURE = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+EVENT_SOCKET = os.path.join(RUNTIME, "hypr", SIGNATURE, ".socket2.sock")
+
+close_event = threading.Event()
+
+
+def hypr_json(command):
+    try:
+        return json.loads(subprocess.check_output(
+            ["hyprctl", "-j", command], text=True, stderr=subprocess.DEVNULL))
+    except Exception:
+        return None
+
+
+def active_id():
+    info = hypr_json("activeworkspace")
+    return info.get("id", -1) if info else -1
+
+
+def focus_workspace(target):
+    expression = 'hl.dispatch(hl.dsp.focus({workspace="%s"}))' % target
+    try:
+        subprocess.run(["hyprctl", "eval", expression],
+                       capture_output=True, timeout=5)
+    except Exception:
+        pass
+
+
+def move_window(address, target, follow=False):
+    expression = ('hl.dispatch(hl.dsp.window.move({workspace="%s", follow=%s, '
+                  'window="address:%s"}))'
+                  % (target, "true" if follow else "false", address))
+    try:
+        subprocess.run(["hyprctl", "eval", expression],
+                       capture_output=True, timeout=5)
+    except Exception:
+        pass
+
+
+def workspace_map():
+    workspaces = hypr_json("workspaces")
+    clients = hypr_json("clients")
+    if not workspaces or clients is None:
+        return [], {}
+    ids = sorted(w["id"] for w in workspaces if w["id"] > 0)
+    by_ws = {}
+    for client in clients:
+        wid = client.get("workspace", {}).get("id")
+        if wid in ids:
+            by_ws.setdefault(wid, []).append(client["address"])
+    return ids, by_ws
+
+
+def maybe_leave_emptied_workspace():
+    """Called only after a window was closed."""
+    time.sleep(0.4)  # let Hyprland settle after closewindow
+    ids, by_ws = workspace_map()
+    active = active_id()
+    if active <= 0 or by_ws.get(active):
+        return
+    lower = [i for i in ids if i < active and by_ws.get(i)]
+    if lower:
+        focus_workspace(max(lower))
+        return
+    higher = [i for i in ids if i > active and by_ws.get(i)]
+    if higher:
+        focus_workspace(min(higher))
+
+
+def compact_once():
+    ids, by_ws = workspace_map()
+    if not ids:
+        return
+    active = active_id()
+    changed = True
+    while changed:
+        changed = False
+        empties = [i for i in ids if not by_ws.get(i)]
+        occupied = [i for i in ids if by_ws.get(i)]
+        for empty in empties:
+            donors = [i for i in occupied if i > empty]
+            if not donors:
+                continue
+            donor = min(donors)
+            # If the donor is the workspace being viewed, follow the window so
+            # the user never lands on an empty desktop.
+            following = donor == active
+            for address in by_ws[donor]:
+                move_window(address, empty, follow=following)
+            by_ws[empty] = by_ws.pop(donor)
+            changed = True
+            break
+
+
+def listen_events():
+    while True:
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(EVENT_SOCKET)
+            buffer = b""
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                buffer += chunk
+                while b"\n" in buffer:
+                    line, buffer = buffer.split(b"\n", 1)
+                    if line.decode("utf-8", "replace").startswith("closewindow>>"):
+                        close_event.set()
+        except Exception:
+            time.sleep(2)
+
+
+def watch_close():
+    while True:
+        close_event.wait()
+        close_event.clear()
+        time.sleep(0.3)  # coalesce bursts of close events
+        maybe_leave_emptied_workspace()
+
+
+def main():
+    threading.Thread(target=listen_events, daemon=True).start()
+    threading.Thread(target=watch_close, daemon=True).start()
+    while True:
+        compact_once()
+        time.sleep(2)
+
+
+if __name__ == "__main__":
+    main()
